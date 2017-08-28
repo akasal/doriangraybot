@@ -12,10 +12,39 @@ import (
 	"github.com/dghubble/oauth1"
 	s "strings"
 	"github.com/hypebeast/go-osc/osc"
+
+	"github.com/graarh/golang-socketio"
+	"github.com/graarh/golang-socketio/transport"
+	"net/http"
+	"time"
+	//"github.com/hypebeast/go-osc/osc"
 )
 var p = fmt.Println
 
+//the following is for socketio
+type Channel struct {
+	Channel string `json:"channel"`
+}
+type Message struct {
+	Id      int    `json:"id"`
+	Channel string `json:"channel"`
+	Text    string `json:"text"`
+}
+
+
 func main() {
+
+	//socketio stuff
+	server := gosocketio.NewServer(transport.GetDefaultWebsocketTransport())
+	server.On(gosocketio.OnConnection, func(c *gosocketio.Channel) {
+		log.Println("Connected")
+		c.Emit("/message", Message{10, "main", "using emit"})
+		c.Join("test")
+		c.BroadcastTo("test", "/message", Message{10, "main", "using broadcast"})
+//socketio continues at the end
+
+
+
 	flags := flag.NewFlagSet("user-auth", flag.ExitOnError)
 	consumerKey := flags.String("consumer-key", "OEPcDrSLMtC5pUoNNjcyewM9L", "Twitter Consumer Key")
 	consumerSecret := flags.String("consumer-secret", "Lr0z3mWKbyCXTaegpzjpZh5biIx1osvdZRGf11eMUJGBVhf3Zf", "Twitter Consumer Secret")
@@ -43,18 +72,23 @@ func main() {
 		//p("Contains:  ", s.Contains("test", "es"))
 		//p("Contains:  ", s.Contains(tweet.Text, "love"))
 		//if (s.Contains(tweet.Text, "love"))||(s.Contains(tweet.Text, "hate"))||(s.Contains(tweet.Text, "trump")){
-
 		if (s.Contains(tweet.Text, "love"))||(s.Contains(tweet.Text, "hate"))||(s.Contains(tweet.Text, "LOVE"))||(s.Contains(tweet.Text, "HATE"))||(s.Contains(tweet.Text, "Love"))||(s.Contains(tweet.Text, "Hate")){
-		fmt.Println(tweet.Text)
+			fmt.Println(tweet.Text)
 			client := osc.NewClient("localhost", 8765)
 			msg := osc.NewMessage("/dorian/address")
 			//msg.Append(int32(111))
 			//msg.Append(true)
-			msg.Append("facechange")
+			msg.Append(tweet.Text) //was "facechange"
 			client.Send(msg)
+			c.Emit("/message", Message{10, "main", tweet.Text})
 		}
 		//fmt.Println(tweet.Text)
 	}
+
+
+
+
+
 
 	demux.DM = func(dm *twitter.DirectMessage) {
 		//fmt.Println(dm.SenderID)
@@ -90,6 +124,8 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 
+
+
 	// SAMPLE
 	 sampleParams := &twitter.StreamSampleParams{
 	 	StallWarnings: twitter.Bool(true),
@@ -109,4 +145,30 @@ func main() {
 
 	fmt.Println("Stopping Stream for Alpaca_xxx...")
 	stream.Stop()
-}
+
+
+
+
+
+
+
+
+//backto closing socketio
+	})
+	server.On(gosocketio.OnDisconnection, func(c *gosocketio.Channel) {
+		log.Println("Disconnected")
+	})
+	server.On("/join", func(c *gosocketio.Channel, channel Channel) string {
+		time.Sleep(2 * time.Second)
+		log.Println("Client joined to ", channel.Channel)
+		return "joined to " + channel.Channel
+	})
+	serveMux := http.NewServeMux()
+	serveMux.Handle("/socket.io/", server)
+	log.Println("Starting server...")
+	log.Panic(http.ListenAndServe(":3811", serveMux))
+	//end socketio
+
+
+
+	}
